@@ -1,0 +1,86 @@
+[id='jdeps-maven-plugin']
+= JDeps Maven Plugin
+:toc: macro
+
+This Maven plugin allows you to quickly print out the dependencies of your project by package, module, or class.
+
+[id='get-started']
+== Get Started
+
+To quickly print out the dependencies for your project, use this command:
+
+```
+mvn org.jboss.maven.plugins:jdeps-maven-plugin:RELEASE:jdeps
+```
+
+If you get an error about multi-release JARs, you'll have to add the multi-release JAR flag like so:
+
+```
+mvn org.jboss.maven.plugins:jdeps-maven-plugin:RELEASE:jdeps -Djdeps.multiRelease=base
+```
+
+Note that versions of Java before 12 may be _very_ intolerant of mixing multi-release JARs with "regular" JARs.  This
+has been improved somewhat in Java 12 and later.
+
+[id='table-of-contents']
+== Table of Contents
+
+toc::[]
+
+[id='usage']
+== Usage
+
+This plugin is mainly intended to be executed directly from the command line and probably isn't too useful to include in
+a project.  There are several configuration properties which can be used to customize the analysis:
+
+[cols=4*,options="header"]
+|===
+|Property Name
+|Default
+|Valid values
+|Description
+
+|`jdeps.classesDir`
+|`${project.build.outputDirectory}`
+|Any directory or archive
+|The directory where the build output class files may be found.
+
+|`jdeps.filter`
+|`archive`
+|`archive`
+  `module`
+  `package`
+  `none`
+|The level at which self-dependencies should be filtered out.
+
+|`jdeps.ignoreMissing`
+|`false`
+|`false`
+  `true`
+|Set to ignore missing dependencies.  Only support on Java 12 or higher.
+
+|`jdeps.multiRelease`
+|none
+|A release number or `base`
+|Set to enable multi-release JAR support.  Note that mixing MR JARs with regular JARs is not supported before Java 12.
+
+|`jdeps.pattern`
+|none
+|A valid regex
+|The pattern to apply to determine what classes to include in analysis.
+
+|`jdeps.transitive`
+|`false`
+|`false`
+  `true`
+|Set to include transitive dependencies in the report.  The output may be large.
+
+|`jdeps.verbose`
+|`package`
+|`summary`
+  `package`
+  `class`
+|The verbosity level of the output.
+
+|===
+
