@@ -18,13 +18,15 @@
 
 package org.jboss.maven.plugins.jdeps;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.Optional;
 import java.util.Set;
@@ -35,6 +37,7 @@ import org.apache.maven.execution.MavenSession;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
+import org.apache.maven.plugin.logging.Log;
 import org.apache.maven.plugins.annotations.LifecyclePhase;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
@@ -174,38 +177,89 @@ public class JDepsMojo extends AbstractMojo {
             }
         }
         args.add(classesDir);
-        final ByteArrayOutputStream errorOutputStream = new ByteArrayOutputStream();
-        final PrintStream errorStream = new PrintStream(errorOutputStream);
-        final PrintStream outputStream;
-        try {
-            outputStream = outputFile != null ? new PrintStream(new FileOutputStream(outputFile)) : System.out;
+        final PrintStream errorStream = new PrintStream(new LoggingOutputStream(getLog()));
+        try (PrintStream outputStream = new PrintStream(new PassThruLoggingOutputStream(getLog(), outputFile != null ? new FileOutputStream(outputFile) : System.out, outputFile != null))) {
+            int result = tp.run(
+                outputStream,
+                errorStream,
+                args.toArray(NO_STRINGS)
+            );
+            errorStream.flush();
+            outputStream.flush();
+            if (result != 0) {
+                throw new MojoFailureException("Dependency analysis failed");
+            }
         } catch (FileNotFoundException e) {
             throw new MojoExecutionException(e.getMessage(), e);
         }
-        int result = tp.run(
-            outputStream,
-            errorStream,
-            args.toArray(NO_STRINGS)
-        );
-        errorStream.flush();
-        final String errors = new String(errorOutputStream.toByteArray(), StandardCharsets.UTF_8);
-        final StringBuilder b = new StringBuilder();
-        for (int i = 0; i < errors.length(); i = errors.offsetByCodePoints(i, 1)) {
-            final int cp = errors.codePointAt(i);
-            if (cp == '\r') {
+    }
+
+    static abstract class LineOutputStream extends OutputStream {
+        byte[] buffer;
+        int index;
+
+        public void write(final int b) throws IOException {
+            if (b == '\n') {
+                // flush buffer
+                String str = new String(buffer, 0, index, StandardCharsets.UTF_8);
+                write(str);
+                index = 0;
+            } else if (b == '\r') {
                 // ignore
-            } else if (cp == '\n') {
-                getLog().error(b);
-                b.setLength(0);
             } else {
-                b.appendCodePoint(cp);
+                if (buffer == null) {
+                    buffer = new byte[160];
+                } else if (index == buffer.length) {
+                    buffer = Arrays.copyOf(buffer, (buffer.length << 1) + buffer.length >> 1);
+                }
+                buffer[index++] = (byte) b;
             }
         }
-        if (b.length() > 0) {
-            getLog().error(b);
+
+        public abstract void write(final String str) throws IOException;
+    }
+
+    static class LoggingOutputStream extends LineOutputStream {
+        private final Log log;
+
+        LoggingOutputStream(final Log log) {
+            this.log = log;
         }
-        if (result != 0) {
-            throw new MojoFailureException("Dependency analysis failed");
+
+        public void write(final String str) throws IOException {
+            if (str.regionMatches(true, 0, "error: ", 0, 7)) {
+                log.error(str.substring(7));
+            } else if (str.regionMatches(true, 0, "warning: ", 0, 9)) {
+                log.warn(str.substring(9));
+            } else {
+                passThru(str);
+            }
+        }
+
+        public void passThru(final String str) throws IOException {
+            log.error(str);
+        }
+    }
+
+    static class PassThruLoggingOutputStream extends LoggingOutputStream {
+        static final byte[] LINE_SEP = System.lineSeparator().getBytes(StandardCharsets.UTF_8);
+
+        private final OutputStream passThru;
+        private final boolean close;
+
+        PassThruLoggingOutputStream(final Log log, final OutputStream passThru, final boolean close) {
+            super(log);
+            this.passThru = passThru;
+            this.close = close;
+        }
+
+        public void passThru(final String str) throws IOException {
+            passThru.write(buffer, 0, index);
+            passThru.write(LINE_SEP);
+        }
+
+        public void close() throws IOException {
+            if (close) passThru.close();
         }
     }
 }
