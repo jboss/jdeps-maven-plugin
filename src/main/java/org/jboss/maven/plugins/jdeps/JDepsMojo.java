@@ -20,6 +20,8 @@ package org.jboss.maven.plugins.jdeps;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -56,8 +58,17 @@ public class JDepsMojo extends AbstractMojo {
     @Parameter(defaultValue = "archive", property = "jdeps.filter")
     private String filter;
 
-    @Parameter(property = "jdeps.pattern")
+    @Parameter(property = "jdeps.filter.pattern")
+    private String filterPattern;
+
+    @Parameter(property = "jdeps.limit.pattern")
     private String pattern;
+
+    @Parameter(property = "jdeps.limit.packages")
+    private String[] packages;
+
+    @Parameter(property = "jdeps.limit.modules")
+    private String[] modules;
 
     @Parameter(defaultValue = "${session}", readonly = true)
     private MavenSession session;
@@ -74,6 +85,15 @@ public class JDepsMojo extends AbstractMojo {
     @Parameter(defaultValue = "${project.build.outputDirectory}")
     private String classesDir;
 
+    @Parameter(property = "jdeps.outputFile")
+    private File outputFile;
+
+    @Parameter(property = "jdeps.apiOnly")
+    private boolean apiOnly;
+
+    @Parameter(property = "jdeps.dot.output")
+    private File dotOutputDir;
+
     /**
      * Construct a new instance.
      */
@@ -87,7 +107,7 @@ public class JDepsMojo extends AbstractMojo {
         if (filter == null) filter = "package";
         final Optional<ToolProvider> maybeJDeps = ToolProvider.findFirst("jdeps");
         if (! maybeJDeps.isPresent()) {
-            throw new MojoFailureException("No 'jdeps' tool provider found");
+            throw new MojoExecutionException("No 'jdeps' tool provider found");
         }
         final ToolProvider tp = maybeJDeps.get();
 
@@ -99,7 +119,25 @@ public class JDepsMojo extends AbstractMojo {
         }
         args.add("-filter:" + filter);
         if (pattern != null) {
+            args.add("--regex");
+            args.add(pattern);
+        } else if (packages != null && packages.length > 0) {
+            for (String pkg : packages) {
+                args.add("--package");
+                args.add(pkg);
+            }
+        } else if (modules != null && modules.length > 0) {
+            for (String module : modules) {
+                args.add("--require");
+                args.add(module);
+            }
+        }
+        if (filterPattern != null) {
             args.add("-filter");
+            args.add(filterPattern);
+        }
+        if (pattern != null) {
+            args.add("-include");
             args.add(pattern);
         }
         if (multiRelease != null) {
@@ -108,6 +146,13 @@ public class JDepsMojo extends AbstractMojo {
         }
         if (ignoreMissing) {
             args.add("--ignore-missing-deps");
+        }
+        if (apiOnly) {
+            args.add("--api-only");
+        }
+        if (dotOutputDir != null) {
+            args.add("--dot-output");
+            args.add(dotOutputDir.toString());
         }
         final MavenProject project = session.getCurrentProject();
         final Set<Artifact> artifacts = project.getArtifacts();
@@ -131,8 +176,14 @@ public class JDepsMojo extends AbstractMojo {
         args.add(classesDir);
         final ByteArrayOutputStream errorOutputStream = new ByteArrayOutputStream();
         final PrintStream errorStream = new PrintStream(errorOutputStream);
+        final PrintStream outputStream;
+        try {
+            outputStream = outputFile != null ? new PrintStream(new FileOutputStream(outputFile)) : System.out;
+        } catch (FileNotFoundException e) {
+            throw new MojoExecutionException(e.getMessage(), e);
+        }
         int result = tp.run(
-            System.out,
+            outputStream,
             errorStream,
             args.toArray(NO_STRINGS)
         );
