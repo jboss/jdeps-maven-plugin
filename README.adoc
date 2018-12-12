@@ -27,10 +27,10 @@ has been improved somewhat in Java 12 and later.
 
 toc::[]
 
-[id='usage']
-== Usage
+[id='usage-jdeps']
+== Usage: `jdeps` Mojo
 
-This plugin is mainly intended to be executed directly from the command line and probably isn't too useful to include in
+This mojo is mainly intended to be executed directly from the command line and probably isn't too useful to include in
 a project.  There are several configuration properties which can be used to customize the analysis:
 
 [cols=4*,options="header"]
@@ -45,6 +45,11 @@ a project.  There are several configuration properties which can be used to cust
 |Any directory or archive
 |The directory where the build output class files may be found.
 
+|`jdeps.dot.output`
+|none
+|A (possibly non-existent) directory name
+|Directs the `jdeps` utility to output GraphViz-style `dot` diagrams in the given directory.
+
 |`jdeps.filter`
 |`archive`
 |`archive`
@@ -53,21 +58,41 @@ a project.  There are several configuration properties which can be used to cust
   `none`
 |The level at which self-dependencies should be filtered out.
 
+|`jdeps.filter.pattern`
+|none
+|A valid regex
+|A filter that excludes any matching class name from analysis.
+
 |`jdeps.ignoreMissing`
 |`false`
 |`false`
   `true`
 |Set to ignore missing dependencies.  Only support on Java 12 or higher.
 
+|`jdeps.limit.pattern`
+|none
+|A valid regex
+|A pattern to apply to determine what classes to include in analysis.
+
+|`jdeps.limit.packages`
+|none
+|A comma-separated list of package names
+|A list of package names to include in analysis.  Ignored if `jdeps.limit.pattern` is given.
+
+|`jdeps.limit.modules`
+|none
+|A comma-separated list of module names
+|A list of module names to include in analysis.  Ignored if `jdeps.limit.pattern` or `jdeps.limit.packages` is given.
+
 |`jdeps.multiRelease`
 |none
 |A release number or `base`
 |Set to enable multi-release JAR support.  Note that mixing MR JARs with regular JARs is not supported before Java 12.
 
-|`jdeps.pattern`
+|`jdeps.outputFile`
 |none
-|A valid regex
-|The pattern to apply to determine what classes to include in analysis.
+|A file name
+|Send the output to this file instead of printing it on `stdout`.
 
 |`jdeps.transitive`
 |`false`
@@ -84,3 +109,10 @@ a project.  There are several configuration properties which can be used to cust
 
 |===
 
+[id='usage-jdeps']
+== Usage: `jdeps-find-cycles` Mojo
+
+This mojo will find cycles among the graph output.  Like `jdeps`, this mojo is intended to be executed from the command line.
+
+A good strategy is to use the `jdeps` mojo to get the output you want, and then run `jdeps-find-cycles` with the same properties.
+Note that the `jdeps.outputFile` and `jdeps.dot.output` properties are ignored by this mojo; the other properties are supported.
